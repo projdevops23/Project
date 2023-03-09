@@ -1,0 +1,61 @@
+---
+- name: Installation et configuration de Nexus Repository Manager
+  hosts: CICD
+  become: true
+
+  vars:
+    nexus_version: 3.36.0-01
+    nexus_home: /opt/nexus
+    nexus_user: nexus
+    nexus_group: nexus
+    nexus_port: 8081
+
+  tasks:
+
+    - name: Création du groupe Nexus
+      group:
+        name: "{{ nexus_group }}"
+        state: present
+
+    - name: Création de l'utilisateur Nexus
+      user:
+        name: "{{ nexus_user }}"
+        group: "{{ nexus_group }}"
+        home: "{{ nexus_home }}"
+        shell: /bin/false
+
+
+    - name: Téléchargement de Nexus
+      get_url:
+        url: "https://download.sonatype.com/nexus/3/nexus-{{ nexus_version }}-unix.tar.gz"
+        dest: /tmp/nexus.tar.gz
+      register: download_result
+
+    - name: Extraction de Nexus
+      unarchive:
+        src: /tmp/nexus.tar.gz
+        dest: "{{ nexus_home }}"
+        remote_src: true
+        owner: "{{ nexus_user }}"
+        group: "{{ nexus_group }}"
+        creates: "{{ nexus_home }}/nexus-{{ nexus_version }}"
+
+
+    - name: Configuration de Nexus
+      template:
+        src: templates/nexus.properties.j2
+        dest: "{{ nexus_home }}/nexus-{{ nexus_version }}/etc/nexus.properties"
+        owner: "{{ nexus_user }}"
+        group: "{{ nexus_group }}"
+
+
+    - name: Configuration du service Nexus
+      template:
+        src: templates/nexus.service.j2
+        dest: /etc/systemd/system/nexus.service
+
+    - name: Activation et démarrage du service Nexus
+      systemd:
+        name: nexus
+        enabled: true
+        state: started

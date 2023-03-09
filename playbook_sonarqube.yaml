@@ -1,0 +1,210 @@
+- name: Install and configure SonarQube with PostgreSQL
+  hosts: CICD
+  become: true
+
+  vars:
+    sonarqube_version: "8.6.1.40680"
+    postgres_version: "9.6"
+    postgres_user: "sonarqube"
+    postgres_password: "mypassword"
+    postgres_dbname: "sonarqube"
+    sonarqube_user: "sonar_user"
+
+- name: Install psycopg2 Python module
+  hosts: CICD
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Install psycopg2
+      pip:
+        name: psycopg2
+
+   
+
+    - name: Create SonarQube system user
+      vars:
+        sonarqube_user: "sonar_user"
+
+      user:
+        name: "{{ sonarqube_user }}"
+        system: true
+        shell: /bin/false
+        home: /opt/sonarqube
+        
+    - name: Put sonarqube_user in the Wheel group
+      vars:
+        sonarqube_user: "sonar_user"
+      shell: usermod -aG wheel "{{ sonarqube_user }}"
+      become: true
+
+    - name: Download SonarQube
+      vars:
+        sonarqube_user: "sonar_user"
+        sonarqube_version: "8.6.1.40680"
+      get_url:
+        url: "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-{{ sonarqube_version }}.zip"
+        dest: "/tmp/sonarqube-{{ sonarqube_version }}.zip"
+        mode: '0755'
+      become: true
+
+    - name: Unzip SonarQube archive
+      vars:
+        sonarqube_user: "sonar_user"
+        sonarqube_version: "8.6.1.40680"
+      unarchive:
+        src: "/tmp/sonarqube-{{ sonarqube_version }}.zip"
+        dest: "/opt/sonarqube"
+        remote_src: true
+        creates: "/opt/sonarqube/bin/sonar.sh"
+      become: true
+      
+    - name: Set permissions on SonarQube directory
+      vars:
+        sonarqube_user: "sonarqube"
+      file:
+        path: "/opt/sonarqube"
+        state: directory
+        owner: "{{ sonarqube_user }}"
+        group: "{{ sonarqube_user }}"
+        mode: '0755'
+      become: true
+      
+    - name: Set permissions on SonarQube files
+      vars:
+        sonarqube_user: "sonarqube"
+      file:
+        path: "/opt/sonarqube/*"
+        state: directory
+        owner: "{{ sonarqube_user }}"
+        group: "{{ sonarqube_user }}"
+        mode: '0755'
+      become: true
+      
+    - name: Set execute permission on sonar.sh
+      vars:
+        sonarqube_user: "sonarqube"
+        sonarqube_version: "8.6.1.40680"
+      file:
+        path: "/opt/sonarqube/sonarqube-{{ sonarqube_version }}/bin/linux-x86-64/sonar.sh"
+        state: file
+        mode: '0755'
+        owner: "{{ sonarqube_user }}"
+        group: "{{ sonarqube_user }}"
+      become: true
+
+
+
+
+    - name: Install PostgreSQL server
+      yum:
+        name:
+          - postgresql-server
+      become: true
+
+    - name: Initialize PostgreSQL 
+      shell: postgresql-setup --initdb
+      args:
+        executable: /bin/bash
+      become: true
+      ignore_errors: true
+
+    - name: Stop PostgreSQL
+      systemd:
+        name: postgresql
+        enabled: yes
+        state: stopped
+      become: true
+
+    - name: Update pg_hba.conf for trust authentication
+      become: true
+      lineinfile:
+        path: /var/lib/pgsql/data/pg_hba.conf
+        state: present
+        backup: yes
+        line: 'local   all             all                                     trust'
+      
+    - name: Start PostgreSQL
+      systemd:
+        name: postgresql
+        enabled: yes
+        state: started
+      become: true
+
+    - name: Connexion PostgreSQL Postgres User
+      become: true
+      postgresql_user:
+        db: postgres
+        name: postgres
+
+
+    - name: Create PostgreSQL database
+      vars:
+        postgres_dbname: "sonar_db"
+        postgres_password: "postpassword"
+      postgresql_db:
+        name: "{{ postgres_dbname }}"
+        state: present
+        encoding: 'UTF-8'
+        lc_collate: 'en_US.UTF-8'
+        lc_ctype: 'en_US.UTF-8'
+        template: template0
+        login_user: postgres
+
+
+    - name: Configure PostgreSQL to listen on all interfaces
+      lineinfile:
+        path: /var/lib/pgsql/data/postgresql.conf
+        regexp: '^#?(listen_addresses\s*=\s*.*)$'
+        line: "listen_addresses = '*'"
+        state: present
+        backup: yes
+
+
+    - name: Restart PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
+        enabled: yes
+
+    - name: Configure SonarQube to use PostgreSQL
+      vars:
+        postgres_dbname: "sonar_db"
+        sonarqube_version: "8.6.1.40680"
+      lineinfile:
+        path: /opt/sonarqube/sonarqube-{{ sonarqube_version }}/conf/sonar.properties
+        regexp: '^#?(sonar.jdbc.url=jdbc:postgresql://localhost/sonar_user)$'
+        line: 'sonar.jdbc.url=jdbc:postgresql://localhost/{{ postgres_dbname }}'
+        state: present
+
+    - name: Configure SonarQube database credentials
+      vars:
+        postgres_user: "postgres"
+        sonarqube_version: "8.6.1.40680"
+      lineinfile:
+        path: /opt/sonarqube/sonarqube-{{ sonarqube_version }}/conf/sonar.properties
+        regexp: '^#?(sonar.jdbc.username=)$'
+        line: 'sonar.jdbc.username={{ postgres_user }}'
+        state: present
+
+    - name: Configure SonarQube database password
+      vars:
+        postgres_password: "postpassword"
+        sonarqube_version: "8.6.1.40680"
+      lineinfile:
+        path: /opt/sonarqube/sonarqube-{{ sonarqube_version }}/conf/sonar.properties
+        regexp: '^#?(sonar.jdbc.password=)$'
+        line: 'sonar.jdbc.password={{ postgres_password }}'
+        state: present
+
+    - name: Create service systemd for SonarQube
+      become: true
+      template:
+        src: templates/sonar.service.j2
+        dest: /etc/systemd/system/sonar.service
+
+    - name: Start SonarQube service
+      become: true
+      systemd:
+        name: sonar
+        state: started
+        enabled: true

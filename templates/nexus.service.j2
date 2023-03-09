@@ -1,0 +1,15 @@
+[Unit]
+Description=Nexus Repository Manager
+After=network.target
+
+[Service]
+Type=forking
+User={{ nexus_user }}
+Group={{ nexus_group }}
+ExecStart={{ nexus_home }}/nexus-{{ nexus_version }}/bin/nexus start
+ExecStop={{ nexus_home }}/nexus-{{ nexus_version }}/bin/nexus stop
+ExecReload={{ nexus_home }}/nexus-{{ nexus_version }}/bin/nexus restart
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target

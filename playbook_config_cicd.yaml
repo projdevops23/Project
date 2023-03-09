@@ -1,0 +1,55 @@
+- hosts: CICD
+  become: true
+  vars:
+    java_version: "11"
+    java_home: "/usr/lib/jvm/java-{{ java_version }}-openjdk"
+  tasks:
+    - name: Update system package cache
+      yum:
+        update_cache: yes
+
+    - name: Install OpenJDK
+      yum:
+        name: java-{{ java_version }}-openjdk
+        state: present
+
+    - name: Set Java environment variables
+      lineinfile:
+        path: /etc/environment
+        regexp: '^JAVA_HOME='
+        line: 'JAVA_HOME={{ java_home }}'
+        state: present
+
+    - name: Add Jenkins Repository
+      yum_repository:
+        name: jenkins
+        description: Jenkins Stable Repo
+        baseurl: https://pkg.jenkins.io/redhat-stable/
+        gpgcheck: yes
+        gpgkey: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+        state: present
+
+    - name: Install Jenkins
+      yum:
+        name: jenkins
+        state: present
+
+    - name: Start Jenkins service
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Install Maven
+      yum:
+        name: maven
+        state: present
+
+    - name: Install Git
+      yum:
+        name: git
+        state: present
+
+
+
+    

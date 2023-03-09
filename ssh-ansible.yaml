@@ -1,0 +1,31 @@
+---
+- name: Configure SSH keys
+  hosts: servers
+  become: true
+  tasks:
+    - name: Ensure SSH directory exists
+      file:
+        path: /home/trainee/.ssh
+        state: directory
+        mode: '0700'
+
+    - name: Copy SSH public key
+      authorized_key:
+        user: trainee
+        key: "{{ lookup('file', '/home/trainee/.ssh/id_rsa.pub') }}"
+        state: present
+
+    - name: Ensure correct permissions for SSH files
+      file:
+        path: /home/trainee/.ssh
+        state: directory
+        mode: '0700'
+      become_user: sudo
+
+    - name: Ensure correct permissions for SSH private key
+      file:
+        path: /home/trainee/.ssh/id_rsa
+        state: file
+        mode: '0600'
+      become_user: sudo
+

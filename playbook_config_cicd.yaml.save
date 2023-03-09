@@ -1,0 +1,114 @@
+---
+- hosts: CICD
+  become: true
+  vars:
+    java_version: "11"
+    java_home: "/usr/lib/jvm/java-{{ java_version }}-openjdk"
+  tasks:
+    - name: Update system package cache
+      yum:
+        update_cache: yes
+
+    - name: Install OpenJDK
+      yum:
+        name: java-{{ java_version }}-openjdk
+        state: present
+
+    - name: Set Java environment variables
+      lineinfile:
+        path: /etc/environment
+        regexp: '^JAVA_HOME='
+        line: 'JAVA_HOME={{ java_home }}'
+        state: present
+
+    - name: Add Jenkins Repository
+      yum_repository:
+        name: jenkins
+        description: Jenkins Stable Repo
+        baseurl: https://pkg.jenkins.io/redhat-stable/
+        gpgcheck: yes
+        gpgkey: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+        state: present
+
+    - name: Install Jenkins
+      yum:
+        name: jenkins
+        state: present
+
+    - name: Start Jenkins service
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Install Maven
+      yum:
+        name: maven
+        state: present
+
+    - name: Install Git
+      yum:
+        name: git
+        state: present
+
+
+
+    - name: Install PostgreSQL
+      yum:
+        name: postgresql-server
+        state: present
+
+    - name: Initialize PostgreSQL database
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+      become_user: postgres
+      environment:
+        PGDATA: /var/lib/pgsql/data
+        PGSETUP_INITDB_OPTIONS: "--encoding=UTF8"
+
+    - name: Install Nexus Repository Manager
+      unarchive:
+        src: https://download.sonatype.com/nexus/oss/nexus-3.29.2-02-unix.tar.gz
+        dest: /opt/
+        remote_src: yes
+        creates: /opt/nexus-3.29.2-02/bin/nexus
+      notify: start nexus service
+
+  handlers:
+    - name: start nexus service
+      systemd:
+        name: nexus
+        state: started
+        enabled: yes
+
+    - name: Add SonarQube repository
+      yum_repository:
+        name: SonarQube
+        description: SonarQube repository
+        baseurl: https://downloads.sonarsource.com/sonarqube/releases/sonarqube-8.x.y.zip
+        gpgcheck: 0
+        enabled: true
+    - name: Install SonarQube
+      yum:
+        name: sonarqube
+        state: present
+    - name: Configure SonarQube
+      lineinfile:
+         path: /etc/sonarqube/sonar.properties
+         regexp: "{{ item.regexp }}"
+         line: "{{ item.line }}"
+         state: present
+     with_items:
+        - { regexp: "^#sonar.jdbc.username=", line: "sonar.jdbc.username=sonar" }
+        - { regexp: "^#sonar.jdbc.password=", line: "sonar.jdbc.password=sonar" }
+        - { regexp: "^#sonar.jdbc.url=jdbc:postgresql://localhost/sonarqube", line: "sonar.jdbc.url=jdbc:postgresql://localhost/sonarqube" }
+
+
+
+    - name: Start SonarQube service
+      systemd:
+        name: sonarqube
+        state: started
+        enabled: yes

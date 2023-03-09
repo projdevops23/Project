@@ -1,0 +1,12 @@
+# Commenter la ligne ci-dessous pour désactiver la recherche automatique de mises à jour
+sonar.updatecenter.activate=true
+
+# Configuration de la base de données
+sonar.jdbc.username={{ postgres_user }}
+sonar.jdbc.password={{ postgres_password }}
+sonar.jdbc.url=jdbc:postgresql://localhost:5432/sonarqube?currentSchema=public
+
+# Diverses configurations
+sonar.web.host=0.0.0.0
+sonar.web.context=/sonarqube
+sonar.web.port=9000
