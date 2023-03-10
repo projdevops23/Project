@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.39">
+  <description>Pipeline pour construire, tester, analyser et déployer l'application</description>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.91">
+    <script>
+      pipeline {
+        agent any
+        stages {
+          stage('Checkout') {
+            steps {
+              git branch: 'main', url: 'https://github.com/monprojet/monapp.git'
+            }
+          }
+          stage('Build') {
+            steps {
+              sh 'mvn -B clean package'
+            }
+          }
+          stage('Test') {
+            steps {
+              sh 'mvn -B test'
+            }
+          }
+          stage('SonarQube analysis') {
+            steps {
+              withSonarQubeEnv('SonarQube') {
+                sh 'mvn -B sonar:sonar'
+              }
+            }
+          }
+          stage('Deploy') {
+            steps {
+              withMaven(maven: 'Maven 3.6.3', mavenSettingsConfig: 'maven-settings', mavenLocalRepo: '.m2/repository') {
+                sh 'mvn -B deploy'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <sandbox>true</sandbox>
+  </definition>
+</flow-definition>

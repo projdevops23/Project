@@ -1,0 +1,135 @@
+---
+- name: Playbook for CICD machine
+  hosts: CICD
+  become: yes
+
+  tasks:
+    - name: Install Docker dependencies
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+
+
+
+    - name: Add Docker repository
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: https://download.docker.com/linux/centos/8/$basearch/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+        enabled: yes
+
+
+    - name: Installation de Docker
+      ansible.builtin.command: "yum install docker-ce --nobest -y"
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Install Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x'
+
+    - name: Create Docker network
+      docker_network:
+        name: jenkins_sonarqube_nexus_network
+        state: present
+
+    - name: Start PostgreSQL container
+      docker_container:
+        name: postgres
+        image: postgres
+        env:
+          POSTGRES_USER: sonar
+          POSTGRES_PASSWORD: sonar
+          POSTGRES_DB: sonar
+        networks:
+          - name: jenkins_sonarqube_nexus_network
+            
+        ports:
+          - "5432:5432"
+
+    - name: Start SonarQube container
+      docker_container:
+        name: sonarqube
+        image: sonarqube
+        env:
+          SONARQUBE_JDBC_USERNAME: sonar
+          SONARQUBE_JDBC_PASSWORD: sonar
+          SONARQUBE_JDBC_URL: jdbc:postgresql://postgres:5432/sonar
+
+        ports:
+          - "9000:9000"
+
+    - name: Create Nexus data volume
+      docker_volume:
+        name: nexus_data
+
+    - name: Start Nexus container
+      docker_container:
+        name: nexus
+        image: sonatype/nexus3
+        volumes:
+          - nexus_data:/nexus-data
+
+        ports:
+          - "8081:8081"
+
+    - name: Start Jenkins container
+      docker_container:
+        name: jenkins
+        image: jenkinsci/blueocean
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - jenkins_home:/var/jenkins_home
+        ports:
+          - "8080:8080"
+          - "50000:50000"
+
+    - name: Install Maven
+      docker_container:
+        name: jenkins
+        command: 'sh -c "apt-get update && apt-get install -y maven"'
+        state: started
+        detach: true
+        privileged: true
+
+    - name: Restart Jenkins container
+      docker_container:
+        name: jenkins
+        state: started
+
+    - name: Pull Jenkins image
+      docker_image:
+        name: jenkins/jenkins
+        tag: lts
+        pull: yes
+
+    - name: Create Jenkins container
+      docker_container:
+        name: jenkins
+        image: jenkins/jenkins:lts
+        state: started
+        restart_policy: always
+        ports:
+          - "8080:8080"
+        volumes:
+          - "/var/jenkins_home:/var/jenkins_home"
+          - "/var/run/docker.sock:/var/run/docker.sock"
+
+    - name: Install Maven
+      docker_container:
+        name: jenkins
+        command: 'sh -c "apt-get update && apt-get install -y maven"'
+        state: started
+        detach: true
+        privileged: true

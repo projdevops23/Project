@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /bin/bashwq
 # Generate ssh keys on local machine
 
 echo | ssh-keygen -t rsa
@@ -12,6 +12,7 @@ cat /home/trainee/.ssh/id_ecdsa.pub >> /home/trainee/.ssh/authorized_keys
 cat /home/trainee/.ssh/id_ed25519.pub >> /home/trainee/.ssh/authorized_keys
 
 cat /home/didier/.ssh/authorized_keys
+chmod -R 700 /home/trainee/trainee/.ssh
 sudo usermod -aG wheel trainee
 # ssh -l trainee 10.0.2.46  -f "pw.txt"
 
