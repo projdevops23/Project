@@ -12,7 +12,10 @@
           - lvm2
         state: present
 
-
+     - name: Install Git
+      yum:
+        name: git
+        state: present
 
     - name: Add Docker repository
       yum_repository:
